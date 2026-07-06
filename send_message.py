@@ -44,6 +44,19 @@ MESSAGES = [
 def send():
     day_index = datetime.now(timezone.utc).timetuple().tm_yday
     message = MESSAGES[day_index % len(MESSAGES)]
+    thread_id = os.environ.get("TELEGRAM_THREAD_ID")
+    sticker_id = os.environ.get("TELEGRAM_STICKER_ID")
+
+    if sticker_id:
+        sticker_payload = {"chat_id": CHAT_ID, "sticker": sticker_id}
+        if thread_id:
+            sticker_payload["message_thread_id"] = thread_id
+        sticker_response = requests.post(
+            f"https://api.telegram.org/bot{BOT_TOKEN}/sendSticker",
+            data=sticker_payload,
+            timeout=30,
+        )
+        sticker_response.raise_for_status()
 
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
     payload = {
@@ -52,7 +65,6 @@ def send():
         "parse_mode": "HTML",
         "disable_web_page_preview": True,
     }
-    thread_id = os.environ.get("TELEGRAM_THREAD_ID")
     if thread_id:
         payload["message_thread_id"] = thread_id
     response = requests.post(url, data=payload, timeout=30)
