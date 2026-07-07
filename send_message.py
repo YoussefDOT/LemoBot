@@ -1,10 +1,15 @@
+import json
 import os
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 import requests
 
 BOT_TOKEN = os.environ["TELEGRAM_BOT_TOKEN"]
 CHAT_ID = os.environ["TELEGRAM_CHAT_ID"]
 LINK = "https://youssefdot.github.io/MdwnhPoints/"
+
+RIYADH_OFFSET = timedelta(hours=3)
+SEND_HOUR = 3  # local Riyadh hour this should go out in
+STATE_FILE = os.path.join(os.path.dirname(__file__), "state.json")
 
 LINKED_WORD = f'<a href="{LINK}">الموقع</a>'
 
@@ -41,8 +46,32 @@ MESSAGES = [
 ]
 
 
+def load_state():
+    if os.path.exists(STATE_FILE):
+        with open(STATE_FILE) as f:
+            return json.load(f)
+    return {"last_sent": None}
+
+
+def save_state(state):
+    with open(STATE_FILE, "w") as f:
+        json.dump(state, f)
+
+
 def send():
-    day_index = datetime.now(timezone.utc).timetuple().tm_yday
+    riyadh_now = datetime.now(timezone.utc) + RIYADH_OFFSET
+    today = riyadh_now.date().isoformat()
+    force = os.environ.get("FORCE_SEND") == "true"
+
+    state = load_state()
+    if not force and state.get("last_sent") == today:
+        print("Already sent today, skipping")
+        return
+    if not force and riyadh_now.hour != SEND_HOUR:
+        print(f"Not the send hour yet (Riyadh hour is {riyadh_now.hour}), skipping")
+        return
+
+    day_index = riyadh_now.timetuple().tm_yday
     message = MESSAGES[day_index % len(MESSAGES)]
     thread_id = os.environ.get("TELEGRAM_THREAD_ID")
     sticker_id = os.environ.get("TELEGRAM_STICKER_ID")
@@ -70,6 +99,9 @@ def send():
     response = requests.post(url, data=payload, timeout=30)
     response.raise_for_status()
     print("Sent variation", day_index % len(MESSAGES))
+
+    state["last_sent"] = today
+    save_state(state)
 
 
 if __name__ == "__main__":
